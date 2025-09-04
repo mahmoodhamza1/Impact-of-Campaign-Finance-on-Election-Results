@@ -1,0 +1,433 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+  
+---
+
+# Loading the Data
+
+```{r echo=FALSE}
+data <-read.csv('CandidateSummaryAction1.csv')
+```
+
+## Structure of the data
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, results='hide', include=FALSE}
+head(data)
+colnames(data)
+```
+
+## Fixing the names of all the variables
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, results='hide', include=FALSE}
+new_column_names <- c("Candidate_Id", "Candidate_Name", "Candidate_Office", "Candidate_Office_State",
+                      "Candidate_Office_District", "Candidate_Party_Affiliation", "Candidate_Incumbent_Challenge_Open_Seat",
+                      "Candidate_Street_1", "Candidate_Street_2", "Candidate_City", "Candidate_State", "Candidate_Zip",
+                      "Individual_Itemized_Contribution", "Individual_Unitemized_Contribution", "Individual_Contribution",
+                      "Party_Committee_Contribution", "Other_Committee_Contribution", "Candidate_Contribution", "Total_Contribution",
+                      "Transfer_From_Other_Authorized_Committee", "Candidate_Loan", "Other_Loan", "Total_Loan",
+                      "Offsets_To_Operating_Expenditures", "Offsets_To_Fundraising", "Offsets_To_Legal_Accounting", "Other_Receipts",
+                      "Total_Receipts", "Operating_Expenditure",
+                      "Exempt_Legal_Accounting_Disbursement", "Funding_Disbursement", "Transfer_to_Other_Authorized_Committee", "Candidate_Loan_Repayment", "Other_Loan_Repayment","Total_Loan_Repayment", "Individual_Refund", "Party_Committee_Refund", "Other_Committee_Refund", "Total_Contribution_Refund", "Other_Disbursement", "Total_Disbursement", "Cash_On_Hand_Beginning_Of_Period", "Cash_On_Hand_Close_Of_Period", "Net_Contribution","Net_Operating_Expenditure", "Debt_Owed_By_Committee", "Debt_Owed_To_Committee", "Coverage_Start_Date", "Coverage_End_Date", "Winner", "Votes")
+
+# Rename the columns
+colnames(data) <- new_column_names
+```
+
+
+## Data featuring and Cleaning
+
+### Fixing the structure of the dataset
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, results='hide', include=FALSE}
+library(dplyr)
+
+#  The conversion from character to numeric
+financial_columns <- c("Individual_Itemized_Contribution", "Individual_Unitemized_Contribution", "Individual_Contribution",
+                       "Party_Committee_Contribution", "Other_Committee_Contribution", "Candidate_Contribution", 
+                       "Total_Contribution", "Candidate_Loan", "Other_Loan", "Total_Loan", 
+                       "Offsets_To_Fundraising", "Offsets_To_Legal_Accounting", "Other_Receipts", "Total_Receipts", 
+                       "Operating_Expenditure", "Exempt_Legal_Accounting_Disbursement", "Funding_Disbursement", 
+                       "Total_Disbursement", "Cash_On_Hand_Beginning_Of_Period", "Cash_On_Hand_Close_Of_Period", 
+                       "Net_Contributiontribution", "Net_Operating_Expenditure", "Debt_Owed_By_Committee", "Debt_Owed_To_Committee",
+                       "Total_Individual_Refund", "Party_Committee_Refund", "Other_Committee_Refund", "Total_Contribution_Refund", 
+                       "Total_Loan_Repayment", "Candidate_Loan_Repayment", "Other_Loan_Repayment")
+
+
+# Identify columns that are characters but contain numeric information (like dollar values)
+numeric_like_columns <- sapply(data, function(x) any(grepl("^[$][0-9,]+", x)))
+character_columns_to_convert <- names(numeric_like_columns[numeric_like_columns])
+
+# Converingt these columns to numeric
+data <- data %>%
+  mutate(across(character_columns_to_convert, ~as.numeric(gsub("[\\$,]", "", .x))))
+
+
+# Fixing the date
+data <- data %>%
+  mutate(across(c("Coverage_Start_Date", "Coverage_End_Date"), ~as.Date(.x, format="%m/%d/%Y")))
+
+# Converting categorical data to factors
+data <- data %>%
+  mutate(across(c("Candidate_Office", "Candidate_Office_State", "Candidate_Party_Affiliation", "Candidate_Incumbent_Challenge_Open_Seat"), as.factor))
+
+# Checking the changes
+str(data)
+
+```
+
+### Adding No "N" the Winner Variable
+
+```{r echo=FALSE}
+
+data$Winner[data$Winner == "" | is.na(data$Winner)] <- "N"
+
+```
+
+
+## EDA
+
+The entire project focuses on the two major parties in the US electoral process all other minority parties have been classified as **others** in all the visualizations and analysis.
+
+
+### Number of candidates & Percentage of participants from each party 
+
+```{r echo=FALSE}
+
+library(dplyr)
+library(scales)
+library(ggplot2)
+
+par(mar = c(4,4,1.5,1), mgp = c(2.5,1,0), mfrow = c(1,1))
+
+data <- data %>%
+  mutate(Party_Classification = case_when(
+    grepl("democrat|dem|d$", Candidate_Party_Affiliation, ignore.case = TRUE) ~ "Democrats",
+    grepl("republican|rep|r$", Candidate_Party_Affiliation, ignore.case = TRUE) ~ "Republicans",
+    TRUE ~ "Others"
+  ))
+
+# Number of candidates in each party 
+party_counts <- data %>%
+  group_by(Party_Classification) %>%
+  summarise(Count = n())
+
+# Creating the bar graph for No of canddiates from each party
+ggplot(party_counts, aes(x = Party_Classification, y = Count, fill = Party_Classification)) +
+  geom_bar(stat = "identity", width = 0.5) +
+  scale_fill_manual(values = c("Democrats" = "blue", "Republicans" = "red", "Others" = "orange")) +
+  labs(title = "Number of Candidates by Party Classification",
+       x = "Party Classification",
+       y = "Number of Candidates") +
+  theme_minimal()
+
+
+# Summarizing the data to get no of candidates from each party
+party_counts <- data %>%
+  mutate(Candidate_Party_Affiliation = case_when(
+    Candidate_Party_Affiliation %in% c("DEM", "REP") ~ Candidate_Party_Affiliation,
+    TRUE ~ "Others"
+  )) %>%
+  count(Candidate_Party_Affiliation) %>%
+  mutate(percentage = n / sum(n) * 100)
+```
+
+The Figure 1a displays the number of candidates that participated in the US election cycle of 2016. The bar graph shows that the Republicans had the most no of candidates participating in 2016 elections, 882, while the Democratic party fielded around just under 800 candidates.
+
+Further figure 1b - the pie chart shows in terms of percentage the candidates participating in the 2016, republicans having having 48.6% while the democrats 39.4% of the candidates.
+
+### No of Candidates from each state
+
+
+```{r echo=FALSE}
+library(ggplot2)
+library(dplyr)
+
+# Counting the number of candidates in each state
+candidate_counts <- data %>%
+  group_by(Candidate_Office_State) %>%
+  summarise(Count = n())
+
+# Creating a bar chart 
+ggplot(candidate_counts, aes(x = Candidate_Office_State, y = Count, fill = Candidate_Office_State)) +
+  
+  geom_bar(stat = "identity", width = 0.9) +  
+  theme_minimal() +
+  labs(title = "Fig 2 - Number of Candidates by State", 
+       x = "State", 
+       y = "Number of Candidates") +
+  theme(axis.text.x = element_text(angle = 60, hjust = 0.5, size = 6.5),  # Keep the text angle and size the same
+        axis.text.y = element_text(size = 10),
+        plot.title = element_text(hjust = 0.5, size = 14)) +  
+  scale_x_discrete(expand = expansion(mult = c(0.05, 0.05))) +  
+  theme(legend.position = "none")  # Remove legend
+
+
+
+```
+
+Fig 2 shows the no of the participants from each state. Some of the states like California and Texas have the highest no of candidates while several states had very few number of participants. This visualization help in understanding the importance of states in the US electoral process which reflected by the political engagement from that particular state.
+
+
+## Correlation between key financial variables
+
+```{r echo=FALSE, message=FALSE}
+
+library(dplyr)
+library(corrplot)
+library(viridis)  
+
+# Select the specified numerical columns
+selected_columns <- data %>%
+  select(Total_Disbursement,
+         Cash_On_Hand_Beginning_Of_Period,
+         Cash_On_Hand_Close_Of_Period,
+         Net_Contribution,
+         Net_Operating_Expenditure,
+         Debt_Owed_By_Committee)
+
+# Renaming the columns to their abbreviations, for better aesthetic
+
+colnames(selected_columns) <- c("TD", "COH_Begin", "COH_Close", "NC", "NOE", "DOBC")
+
+# Check for missing values in the selected columns
+missing_values <- sapply(selected_columns, function(x) sum(is.na(x)))
+print(missing_values)
+```
+
+```{r echo=FALSE, message = FALSE}
+# Imputing the missing values with the median to make the correlation matrix
+selected_columns <- selected_columns %>%
+  mutate_all(~ifelse(is.na(.), median(., na.rm = TRUE), .))
+
+
+cor_matrix <- cor(selected_columns, use = "complete.obs")
+
+col <- viridis(200, option = "magma")
+
+# Creating the correlation matrix
+corrplot(cor_matrix, method = "color", col = col, tl.cex = 0.8, number.cex = 0.7, addCoef.col = "black", 
+         title = "Fig 3 - Correlation Matrix of Key Financial Variables", mar = c(0, 0, 2, 0), tl.col = "black", tl.srt = 45)
+```
+**NOTE**: abbreviations have been used in the matrix for better aesthetics
+
+The correlation matrix shows the relationship between the key financial variables we have identified in the data that play a role in predicting the election winner. Total Disbursement (TD) and Net Contribution (NC) have a very high correlation of 0.93. Same is the case for Net contribution (NC) and Net Operating Expenditure, they have a correltaion of 0.99 which indicates as the money raised for a political campaign increases the candidates tend to increase their expenditure as well, implying the majority is spent on running the their campaign operations.
+
+
+
+## Net expenditures by party
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#library(treemap)
+library(gridExtra)
+library(treemap)
+
+
+# Cleaning the Net_Operating_Expenditure column to convert it to numeric
+data$Net_Operating_Expenditure <- as.numeric(gsub("[\\$,]", "", data$Net_Operating_Expenditure))
+
+# Filtering data for Republicans and Democrats
+republicans <- data %>%
+  filter(Candidate_Party_Affiliation == "REP" & Candidate_Office_State != "US")
+
+democrats <- data %>%
+  filter(Candidate_Party_Affiliation == "DEM" & Candidate_Office_State != "US")
+
+# Aggregating the data by state for tje Treemap
+rep_agg <- republicans %>%
+  group_by(Candidate_Office_State) %>%
+  summarise(Total_Net_Operating_Expenditures = sum(Net_Operating_Expenditure, na.rm = TRUE))
+
+dem_agg <- democrats %>%
+  group_by(Candidate_Office_State) %>%
+  summarise(Total_Net_Operating_Expenditures = sum(Net_Operating_Expenditure, na.rm = TRUE))
+```
+
+```{r echo=FALSE}
+# Creating treemaps 
+# Republicans
+treemap_rep <- treemap(rep_agg,
+                       index = "Candidate_Office_State",
+                       vSize = "Total_Net_Operating_Expenditures",
+                       title = "Fig 4.a - Republican Net Expenditures by State",
+                       palette = "Reds")
+
+# Democrats
+treemap_dem <- treemap(dem_agg,
+                       index = "Candidate_Office_State",
+                       vSize = "Total_Net_Operating_Expenditures",
+                       title = "Fig 4.b - Democrat Net Expenditures by State",
+                       palette = "Blues")
+```
+The Figure  visualizes the net expenditures of the republican candidates across various states. For the republicans Florida (FL), Pennsylvania (PA) and California (CA) have the highest net expenditures on the political activities which highlights the importance of these states for the outcome for the republican candidates and importance of winning them to ensure the seat at the Oval office. Meanwhile the democrats spent the most in California (CA), Florida (FL) and Maryland (MD). The visual representation focuses on the concentarion of financial resources in the states that play a important role in getting the electoral victories, with both parties showing distinct but overlapping patters in their expenditure strategies.
+
+
+### Relationship Between votes and Net expenditures for House of represensetatives (Lower House)
+
+```{r echo=FALSE}
+# Filtering for Lower House members only
+lower_house_data <- data %>%
+  filter(Candidate_Office == "H")
+
+# Cleaning the net_expenditure and Votes columns to convert them to numeric
+lower_house_data$Net_Operating_Expenditure <- as.numeric(gsub("[\\$,]", "", lower_house_data$Net_Operating_Expenditure))
+lower_house_data$Votes <- as.numeric(gsub("[\\$,]", "", lower_house_data$Votes))
+
+# Filtering the data for necessary columns and handle any missing values
+lower_house_data <- lower_house_data %>%
+  select(Candidate_Party_Affiliation, Net_Operating_Expenditure, Votes, Candidate_Incumbent_Challenge_Open_Seat) %>%
+  filter(!is.na(Net_Operating_Expenditure), !is.na(Votes), !is.na(Candidate_Party_Affiliation), !is.na(Candidate_Incumbent_Challenge_Open_Seat))
+
+# Creating the scatter plot with an additional variable (
+# Incumbent, Challenger, Open seat status)
+scatter_plot1 <- ggplot(lower_house_data, aes(x = Net_Operating_Expenditure, y = Votes, color = Candidate_Party_Affiliation, shape = Candidate_Incumbent_Challenge_Open_Seat)) +
+  geom_point(size = 3, alpha = 0.7) +
+  scale_color_manual(values = c("DEM" = "blue", "REP" = "red")) +
+  labs(title = "Fig 5 - Net Expenditure vs Votes for Lower House Members",
+       x = "Net Expenditure (in dollars)",
+       y = "Votes Received",
+       color = "Party",
+       shape = "Status") +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12)
+  ) +
+  scale_x_continuous(labels = scales::dollar) +
+  scale_y_continuous(labels = scales::comma)
+
+print(scatter_plot1)
+
+```
+The plot visualizes the relationship between the net expenditure and votes received by the member of lower house, how many dollars a candidate has to spend to recieve a vote. The color showcases the part affiliation while the shape of the data point shows the status of the candidate. Candidates with expenditures on higher sides (that is upwards of $2 million), do not proportionally increase their respective votes bank, hence every additional vote requires more dollar to spent. While some of the candidates received a very high number of votes with lower expenditure (less than $2 million), this shows the effectiveness of the political campaigns, making sure their message reaches to the mass public. THe incumbents, as the plot shows, have to spend relatively less then challengers as they are able to leverage their position and recognition to secure more votes. Candidates in open races show a varying trend, clustering around the moderate expenditure region. Democrats have a dense cluster of votes around the lower end while the republicans have a varying trend.
+
+## Relationship between Net contribution and Net operating expenditures for Upper House (Senate)
+
+```{r echo=FALSE}
+upper_house_data <- data %>%
+  filter(Candidate_Office == "S")
+
+# Cleaning the Net_Contribution and Net_Operating_Expenditure columns to convert them to numeric
+upper_house_data$Net_Contribution <- as.numeric(gsub("[\\$,]", "", 
+                                            upper_house_data$Net_Contribution))
+upper_house_data$Net_Operating_Expenditure <- as.numeric(gsub("[\\$,]", "", upper_house_data$Net_Operating_Expenditure))
+
+# Filtering of data for the required columns and handle any missing values
+upper_house_data <- upper_house_data %>%
+  select(Candidate_Party_Affiliation, Net_Contribution, Net_Operating_Expenditure, Candidate_Incumbent_Challenge_Open_Seat) %>%
+  filter(!is.na(Net_Contribution), !is.na(Net_Operating_Expenditure), !is.na(Candidate_Party_Affiliation), !is.na(Candidate_Incumbent_Challenge_Open_Seat))
+
+# Creating the scatter plot with an additional variable (Incumbent, Challenger, 
+# Open seat status)
+p <- ggplot(upper_house_data, aes(x = Net_Contribution, y = Net_Operating_Expenditure, 
+                                  color = Candidate_Party_Affiliation, 
+                                  shape = Candidate_Incumbent_Challenge_Open_Seat)) +
+  geom_point(size = 3, alpha = 0.7) +
+  scale_color_manual(values = c("DEM" = "blue", "REP" = "red")) +
+  labs(title = "Fig 6 - Net Contributions vs Net Expenditures for Senate",
+       x = "Net Contributions (in dollars)",
+       y = "Net Expenditures (in dollars)",
+       color = "Party",
+       shape = "Status") +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12)
+  ) +
+  scale_x_continuous(labels = scales::dollar) +
+  scale_y_continuous(labels = scales::dollar)
+
+print(p)
+```
+
+The scatter plot showcases the relationship between the net contributions and net operating expenditure by the Senate candidates of both the parties. The plot shows a positive correlation between both the variables. Both parties have similar trends, however there are some outliers cases, with some republican candidate spending up-to 25 million dollars approx while generating around 19 million, same is the case for one of the democrat as well who spent 30 million while generating 15 million, implying hotly contested race. Incumbents seem to spend more and generate more compared to the challengers and open seat candidates, mainly due to their already establish positions.
+
+
+## Predictive Model
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, results='hide', include=FALSE}
+data$Winner <- factor(data$Winner, levels = c("Y", "N"))
+print(data$Winner)
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, results='hide', include=FALSE}
+missing_winner_rows <- data[is.na(data$Winner), ]
+print(missing_winner_rows)
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+library(glmnet)
+library(caret)
+# Checking for missing values in relevant columns before splitting the data
+colSums(is.na(data[, c("Winner", "Net_Contribution", "Cash_On_Hand_Beginning_Of_Period", "Cash_On_Hand_Close_Of_Period", "Net_Operating_Expenditure")]))
+
+# Handling of missing missing values 
+data <- data %>%
+  mutate(across(c("Net_Contribution", "Cash_On_Hand_Beginning_Of_Period", "Cash_On_Hand_Close_Of_Period", "Net_Operating_Expenditure"), ~replace_na(.x, 0)))
+
+# Converting Winner to numeric for logistic regression model
+data$Winner <- ifelse(data$Winner == "Y", 1, 0)
+
+write.csv(data, 'data2.csv', row.names = FALSE)
+```
+
+```{r echo=FALSE}
+data2 <- read.csv('data2.csv')
+```
+
+
+```{r warning=FALSE}
+set.seed(123)
+
+# Spliting the data into training and testing 
+trainIndex <- createDataPartition(data2$Winner, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+dataTrain <- data2[ trainIndex,]
+dataTest  <- data2[-trainIndex,]
+
+# Prepare data for log model into trainiing and testing
+x_train <- as.matrix(dataTrain[, c("Net_Contribution", "Cash_On_Hand_Beginning_Of_Period", "Cash_On_Hand_Close_Of_Period", "Net_Operating_Expenditure")])
+y_train <- dataTrain$Winner
+
+x_test <- as.matrix(dataTest[, c("Net_Contribution", "Cash_On_Hand_Beginning_Of_Period", "Cash_On_Hand_Close_Of_Period", "Net_Operating_Expenditure")])
+y_test <- dataTest$Winner
+
+# Training a logistic regression model with Lasso regularization 
+cv_fit <- cv.glmnet(x_train, y_train, family = "binomial", alpha = 1)
+
+# Best lambda
+best_lambda <- cv_fit$lambda.min
+
+# Fitting the final model on the training data
+final_model <- glmnet(x_train, y_train, family = "binomial", alpha = 1, lambda = best_lambda)
+
+# Predicting the training outcome on the testing set
+predictions <- predict(final_model, s = best_lambda, newx = x_test, type = "response")
+predicted_classes <- ifelse(predictions > 0.5, 1, 0)
+
+# Confusion matrix to analyze the model
+confusionMatrix(factor(predicted_classes, levels = c(0, 1)), factor(y_test, levels = c(0, 1)))
+
+# ROC curve visualization 
+library(pROC)
+roc_curve <- roc(y_test, predictions)
+plot(roc_curve, main = "ROC Curve", col = "blue")
+```
+
+The predictive model has been created using the logistic regression with lasso regularization, demonstrates high accuracy (0.884) and sensitivity (0.977), showing the effectiveness in identifying positive cases. However lower specificity suggests (0.6129) there is room for improvements in identifying the negative cases. The ROC curve with the model further confirms the performance as well.
+
+
+
+
+
+
+
+
+
